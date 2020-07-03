@@ -181,20 +181,10 @@ typedef enum mmwDemo_can_message_type_e
     
 } mmwDemo_can_message_type;
 
-
-const char TestCmdEnglish[] = {0xFD, // Command header
+char TestCmdEnglish[] = {0xFD, // Command header
                           0x00, 0x16, // Data length of the following bytes
                           0x01,       // Speak command sub-header
                           0x00,       // Speak in GB2312 format
-
-                          '[',        // Set Begin
-                          'v','5',    // Volume level: 2/10
-                          ']',        // Set End
-
-                          '[',        // Set Begin
-                          'h','2',    // Word Pronounce[Letter/Word]: Word
-                          ']',        // Set End
-                          'H','e','l','l','o',' ','w','o','r','l','d','!'
                           };
 
 void Write_Byte(char dat)
@@ -215,7 +205,7 @@ void Write_Byte(char dat)
 
 }
 
-static void Test_initTask(UArg arg0, UArg arg1)
+static void SPI_initTask(UArg arg0, UArg arg1)
 {
     /* Debug Message: */
     System_printf ("***********************************************\n");
@@ -255,22 +245,7 @@ static void Test_initTask(UArg arg0, UArg arg1)
     GPIO_write(GPIO_CS,1);
     GPIO_write(GPIO_CLK,0);
 
-    while(1)
-    {
-        unsigned char LoopCnt = 0;  // Loop counter
-        for(LoopCnt = 0; LoopCnt < sizeof(TestCmdEnglish); LoopCnt++)
-        {
-            GPIO_write(GPIO_CS,0);
 
-            //shiftOut(SPI_MOSI, SPI_CLK, MSBFIRST, TestCmdEnglish[LoopCnt]);
-            Write_Byte(TestCmdEnglish[LoopCnt]);
-            GPIO_write(GPIO_CS,1);
-
-            Task_sleep(1); //Wait for at least 105us , 1 ms here.
-        }
-        System_printf ("************** Message Sent. ****************\n");
-        Task_sleep(3000); //Wait for at least 105us , 3 s here.
-    }
     return;
 }
 
@@ -764,7 +739,7 @@ static void MRR_MSS_frameStartIntCallback(uintptr_t arg)
         }
         else
         {
-            DebugP_assert (0);
+           // DebugP_assert (0);
         }
     }
 }
@@ -1063,9 +1038,97 @@ static void MmwDemo_mboxReadTask(UArg arg0, UArg arg1)
                         /* Send TLVs */
                         for (itemIdx = 0;  itemIdx < message.body.detObj.header.numTLVs; itemIdx++)
                         {
+
+
+                            if(message.body.detObj.tlv[itemIdx].type==3)
+                            {
+                                //tracked points
+                                /*
+                                System_printf("\n%d",message.body.detObj.tlv[itemIdx].length);
+                                System_printf("\nContent:");
+                                for(uint16_t i=0;i<message.body.detObj.tlv[itemIdx].length;i++)
+                                {
+                                    System_printf("%x ",*((uint8_t*)SOC_translateAddress(message.body.detObj.tlv[itemIdx].address, SOC_TranslateAddr_Dir_FROM_OTHER_CPU,NULL)+i));
+                                    //System_printf("%d ",*((uint8_t*)SOC_translateAddress(message.body.detObj.tlv[itemIdx].address, SOC_TranslateAddr_Dir_FROM_OTHER_CPU,NULL)+i));
+
+                                }
+                                */
+
+                                uint8_t detNum = (message.body.detObj.tlv[itemIdx].length - 4)/12;
+
+                                //uint8_t Qformat1= (uint8_t)*((uint8_t*)SOC_translateAddress(message.body.detObj.tlv[itemIdx].address, SOC_TranslateAddr_Dir_FROM_OTHER_CPU,NULL)+2);
+                                uint16_t xyzQFormat = (*((uint8_t*)SOC_translateAddress(message.body.detObj.tlv[itemIdx].address, SOC_TranslateAddr_Dir_FROM_OTHER_CPU,NULL)+2)*1+
+                                                        *((uint8_t*)SOC_translateAddress(message.body.detObj.tlv[itemIdx].address, SOC_TranslateAddr_Dir_FROM_OTHER_CPU,NULL)+3)*256);
+                                xyzQFormat = pow(2,xyzQFormat);
+                                double oneByxyzQFormat = 1/xyzQFormat;
+                                //System_printf("\noneByQFormat:\n",oneByxyzQFormat);
+                                uint8_t *xx = (uint8_t*)SOC_translateAddress(message.body.detObj.tlv[itemIdx].address, SOC_TranslateAddr_Dir_FROM_OTHER_CPU,NULL);
+
+
+                                int32_t x,y,xSize,ySize;
+                                x = xx[4]*1+xx[5]*256;
+                                y = xx[6]*1+xx[7]*256;
+
+                                //System_printf("\ndetBNum:%d ,xyzQFormat: %d , x:%d ,y: %d\n",detNum,xyzQFormat,x,y);
+
+                                x=x>32767? x-65536:x;
+                                y=y>32767? y-65536:y;
+                                //System_printf("x:%d ,y: %d\n",x,y);
+
+                                float xinm = x/xyzQFormat;
+                                float yinm = y/xyzQFormat;
+
+                                //System_printf("x:%f ,y: %f\n",xinm,yinm);
+
+                                char str1[]="Caution,";
+                                char str3[]="one point five";
+                                char str2[]="meters!";
+                                char str4[]="two";
+                                sprintf(str3,"%.1f",yinm);
+
+                                unsigned char LoopCnt = 0;  // Loop counter
+                                char lenOfStr = sizeof(str1)+sizeof(str2)+sizeof(str3)-3;
+                                TestCmdEnglish[2] = lenOfStr;
+                                for(LoopCnt = 0; LoopCnt < sizeof(TestCmdEnglish)-1; LoopCnt++)
+                                {
+                                    GPIO_write(GPIO_CS,0);
+                                    Write_Byte(TestCmdEnglish[LoopCnt]);
+                                    GPIO_write(GPIO_CS,1);
+
+                                    Task_sleep(1); //Wait for at least 105us , 1 ms here.
+                                }
+                                for(LoopCnt = 0; LoopCnt < sizeof(str1)-1; LoopCnt++)
+                                {
+                                    GPIO_write(GPIO_CS,0);
+                                    Write_Byte(str1[LoopCnt]);
+                                    GPIO_write(GPIO_CS,1);
+
+                                    Task_sleep(1); //Wait for at least 105us , 1 ms here.
+                                }
+                                for(LoopCnt = 0; LoopCnt < sizeof(str3)-1; LoopCnt++)
+                                {
+                                    GPIO_write(GPIO_CS,0);
+                                    Write_Byte(str3[LoopCnt]);
+                                    GPIO_write(GPIO_CS,1);
+
+                                    Task_sleep(1); //Wait for at least 105us , 1 ms here.
+                                }
+                                for(LoopCnt = 0; LoopCnt < sizeof(str2)-1; LoopCnt++)
+                                {
+                                    GPIO_write(GPIO_CS,0);
+                                    Write_Byte(TestCmdEnglish[LoopCnt]);
+                                    GPIO_write(GPIO_CS,1);
+
+                                    Task_sleep(1); //Wait for at least 105us , 1 ms here.
+                                }
+
+
+                            }
+
                             UART_writePolling (gMrrMSSMCB.loggingUartHandle,
                                                (uint8_t*)&message.body.detObj.tlv[itemIdx],
                                                sizeof(MmwDemo_output_message_tl));
+
                             txMsgObjectParams.msgIdentifier = Get_CanMessageIdentifier((MmwDemo_output_message_type)message.body.detObj.tlv[itemIdx].type);
 
                             Can_Transmit_Schedule(txMsgObjectParams.msgIdentifier,
@@ -1297,6 +1360,30 @@ static void MRR_MSS_initTask (UArg arg0, UArg arg1)
     /* Pinmux setting */
 
     /* Setup the PINMUX to bring out the UART-1 */
+    /* Debug Message: */
+    System_printf ("***********************************************\n");
+    System_printf ("************** GPIO SPI Unit Tests ****************\n");
+    System_printf ("***********************************************\n");
+    /* SPIA_MOSI */
+    Pinmux_Set_OverrideCtrl(SOC_XWR18XX_PIND13_PADAD, PINMUX_OUTEN_RETAIN_HW_CTRL, PINMUX_INPEN_RETAIN_HW_CTRL);
+    Pinmux_Set_FuncSel(SOC_XWR18XX_PIND13_PADAD, SOC_XWR18XX_PIND13_PADAD_GPIO_19);
+
+    /* SPIA_MISO */
+    Pinmux_Set_OverrideCtrl(SOC_XWR18XX_PINE14_PADAE, PINMUX_OUTEN_RETAIN_HW_CTRL, PINMUX_INPEN_RETAIN_HW_CTRL);
+    Pinmux_Set_FuncSel(SOC_XWR18XX_PINE14_PADAE, SOC_XWR18XX_PINE14_PADAE_GPIO_20);
+
+    /* SPIA_CLK */
+    Pinmux_Set_OverrideCtrl(SOC_XWR18XX_PINE13_PADAF, PINMUX_OUTEN_RETAIN_HW_CTRL, PINMUX_INPEN_RETAIN_HW_CTRL);
+    Pinmux_Set_FuncSel(SOC_XWR18XX_PINE13_PADAF, SOC_XWR18XX_PINE13_PADAF_GPIO_3);
+
+    /* SPIA_CS */
+    Pinmux_Set_OverrideCtrl(SOC_XWR18XX_PINE15_PADAG, PINMUX_OUTEN_RETAIN_HW_CTRL, PINMUX_INPEN_RETAIN_HW_CTRL);
+    Pinmux_Set_FuncSel(SOC_XWR18XX_PINE15_PADAG, SOC_XWR18XX_PINE15_PADAG_GPIO_30);
+
+
+
+
+
     Pinmux_Set_OverrideCtrl(SOC_XWR18XX_PINN5_PADBE, PINMUX_OUTEN_RETAIN_HW_CTRL, PINMUX_INPEN_RETAIN_HW_CTRL);    
     Pinmux_Set_FuncSel(SOC_XWR18XX_PINN5_PADBE, SOC_XWR18XX_PINN5_PADBE_MSS_UARTA_TX);
     Pinmux_Set_OverrideCtrl(SOC_XWR18XX_PINN4_PADBD, PINMUX_OUTEN_RETAIN_HW_CTRL, PINMUX_INPEN_RETAIN_HW_CTRL);    
@@ -1319,6 +1406,17 @@ static void MRR_MSS_initTask (UArg arg0, UArg arg1)
     /* Initialize the GPIO */
     GPIO_init();
     
+    GPIO_setConfig (GPIO_MOSI, GPIO_CFG_OUTPUT);
+    GPIO_setConfig (GPIO_CLK, GPIO_CFG_OUTPUT);
+    GPIO_setConfig (GPIO_CS, GPIO_CFG_OUTPUT);
+    GPIO_setConfig (GPIO_MISO, GPIO_CFG_INPUT);
+
+    System_printf ("************** GPIO SPI Init Finished. ****************\n");
+
+    GPIO_write(GPIO_CS,1);
+    GPIO_write(GPIO_CLK,0);
+
+
     /* Initialize the Mailbox */
     Mailbox_init(MAILBOX_TYPE_MSS);
 
