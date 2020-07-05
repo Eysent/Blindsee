@@ -243,7 +243,7 @@ static int32_t MRR_MSS_CLIBasicCfg (int32_t argc, char* argv[])
      *
      * Profile configuration:
      ********************************************************************************/
-    Cfg_ProfileCfgInitParams (0U, &profileCfg);
+    Cfg_ProfileCfgInitParams (1U, &profileCfg);
     retVal = rlSetProfileConfig (RL_DEVICE_MAP_INTERNAL_BSS, 1U, &profileCfg);
     if (retVal != RL_RET_CODE_OK)
     {
